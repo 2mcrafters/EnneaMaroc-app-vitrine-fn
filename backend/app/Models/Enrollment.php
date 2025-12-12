@@ -1,0 +1,180 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Enrollment extends Model
+{
+    protected $fillable = [
+        'user_id',
+        'course_id',
+        'group_id',
+        'status',
+        'enrolled_at',
+        'duration_months'
+    ];
+
+    protected $casts = [
+        'enrolled_at' => 'datetime'
+    ];
+
+    /**
+     * Append the virtual group_data attribute to JSON output
+     */
+    protected $appends = ['group_data'];
+
+    /**
+     * Get the user that owns the enrollment.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the course associated with the enrollment.
+     */
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
+    }
+
+
+
+    /**
+     * Get all payments for this enrollment.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Get confirmed payments for this enrollment.
+     */
+    public function confirmedPayments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->where('status', 'confirmed');
+    }
+
+    /**
+     * Get pending payments for this enrollment.
+     */
+    public function pendingPayments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->where('status', 'pending');
+    }
+
+    /**
+     * Check if enrollment has any confirmed payments.
+     */
+    public function hasConfirmedPayments(): bool
+    {
+        return $this->confirmedPayments()->exists();
+    }
+
+    /**
+     * Get total amount paid for this enrollment.
+     */
+    public function getTotalPaidAmount(): float
+    {
+        return $this->confirmedPayments()->sum('amount');
+    }
+
+    /**
+     * Get total amount pending for this enrollment.
+     */
+    public function getTotalPendingAmount(): float
+    {
+        return $this->pendingPayments()->sum('amount');
+    }
+
+    /**
+     * Get the course group associated with the enrollment if it's a course enrollment.
+     */
+    public function courseGroup(): BelongsTo
+    {
+        return $this->belongsTo(CourseGroup::class, 'group_id');
+    }
+
+    /**
+     * Get the group data (CourseGroup) based on enrollment type
+     * This replaces the old group_data column with a virtual attribute
+     */
+    public function getGroupDataAttribute()
+    {
+        if ($this->course_id && $this->group_id) {
+            return $this->courseGroup;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get the course group data for this enrollment
+     * @deprecated Use getGroupDataAttribute() instead
+     */
+    public function getGroupAttribute()
+    {
+        return $this->getGroupDataAttribute();
+    }
+
+    /**
+     * Get the latest payment for this enrollment.
+     */
+    public function getLatestPayment()
+    {
+        return $this->payments()->orderBy('created_at', 'desc')->first();
+    }
+
+    /**
+     * Check if enrollment is fully paid based on duration.
+     */
+    public function isFullyPaid(): bool
+    {
+        $expectedPayments = $this->duration_months ?? 1;
+        $confirmedPayments = $this->confirmedPayments()->count();
+        
+        return $confirmedPayments >= $expectedPayments;
+    }
+
+    /**
+     * Get missing payment months.
+     */
+    public function getMissingPaymentMonths(): array
+    {
+        $expectedMonths = range(1, $this->duration_months ?? 1);
+        $paidMonths = $this->confirmedPayments()->pluck('month')->toArray();
+        
+        return array_diff($expectedMonths, $paidMonths);
+    }
+
+    /**
+     * Scope to get active enrollments.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    /**
+     * Scope to get enrollments for a specific course.
+     */
+    public function scopeForCourse($query, $courseId)
+    {
+        return $query->where('course_id', $courseId);
+    }
+
+
+
+    /**
+     * Scope to get enrollments for a specific user.
+     */
+    public function scopeForUser($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+}
