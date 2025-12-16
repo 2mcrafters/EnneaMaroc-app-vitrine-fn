@@ -5,22 +5,117 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Enrollment;
+use App\Models\User;
 use App\Http\Requests\StorePaymentRequest;
+use App\Http\Requests\AdminManualPaymentRequest;
 use App\Http\Requests\UpdatePaymentRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class PaymentController extends Controller
 {
+    /**
+     * Admin manual payment: create payment for an existing student OR create a new student,
+     * then create/reuse enrollment, then create payment.
+     */
+    public function adminManual(AdminManualPaymentRequest $request): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+
+            $mode = $request->mode;
+            $status = $request->status ?? 'confirmed';
+
+            /** @var User $user */
+            if ($mode === 'new') {
+                $student = (array) ($request->input('student') ?? []);
+
+                // Create the student user (minimal fields); password is random (student can reset later if needed)
+                $randomPassword = bin2hex(random_bytes(8));
+                $user = User::create([
+                    'firstName' => $student['firstName'] ?? '',
+                    'lastName' => $student['lastName'] ?? '',
+                    'email' => $student['email'] ?? '',
+                    'phone' => $student['phone'] ?? null,
+                    // Some installations use address/adresse; store what exists
+                    'address' => $student['address'] ?? null,
+                    'password' => Hash::make($randomPassword),
+                    'role' => 'student',
+                ]);
+            } else {
+                $user = User::findOrFail($request->user_id);
+            }
+
+            $courseId = $request->course_id;
+
+            // Resolve/create enrollment
+            $enrollment = Enrollment::where('user_id', $user->id)
+                ->where('course_id', $courseId)
+                ->first();
+
+            if (!$enrollment) {
+                $enrollment = Enrollment::create([
+                    'user_id' => $user->id,
+                    'course_id' => $courseId,
+                    'status' => 'active',
+                    'enrolled_at' => now(),
+                ]);
+            }
+
+            // Duplicate check on enrollment/month
+            $existingPayment = Payment::where('enrollment_id', $enrollment->id)
+                ->where('month', $request->month)
+                ->first();
+            if ($existingPayment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment for this month already exists for this enrollment'
+                ], 422);
+            }
+
+            $payment = Payment::create([
+                'enrollment_id' => $enrollment->id,
+                'amount' => $request->amount,
+                'month' => $request->month,
+                'status' => $status,
+                'payment_proof' => $request->payment_proof,
+                'payment_date' => $request->payment_date,
+                'admin_notes' => $request->admin_notes
+            ]);
+
+            $payment->load(['enrollment.user', 'enrollment.course', 'confirmedBy']);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'data' => $payment,
+                'message' => 'Manual payment created successfully'
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating manual payment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Payment::with(['enrollment.user', 'enrollment.course', 'confirmedBy']);
+            $query = Payment::with([
+                'enrollment.user', 
+                'enrollment.course', 
+                'enrollment.session.module.parcours', 
+                'confirmedBy'
+            ]);
 
             // Filter by status if provided
             if ($request->has('status') && $request->status !== 'all') {
@@ -89,8 +184,34 @@ class PaymentController extends Controller
         try {
             DB::beginTransaction();
 
+            // Resolve enrollment:
+            // - If enrollment_id provided, use it
+            // - Else, find/create enrollment for the given user_id + course_id
+            $enrollmentId = $request->enrollment_id;
+            if (!$enrollmentId) {
+                $userId = $request->user_id;
+                $courseId = $request->course_id;
+
+                // Try to reuse an existing enrollment
+                $enrollment = Enrollment::where('user_id', $userId)
+                    ->where('course_id', $courseId)
+                    ->first();
+
+                // Create if missing (admin manual payment path)
+                if (!$enrollment) {
+                    $enrollment = Enrollment::create([
+                        'user_id' => $userId,
+                        'course_id' => $courseId,
+                        'status' => 'active',
+                        'enrolled_at' => now(),
+                    ]);
+                }
+
+                $enrollmentId = $enrollment->id;
+            }
+
             // Check if payment for this enrollment and month already exists
-            $existingPayment = Payment::where('enrollment_id', $request->enrollment_id)
+            $existingPayment = Payment::where('enrollment_id', $enrollmentId)
                                     ->where('month', $request->month)
                                     ->first();
 
@@ -103,10 +224,10 @@ class PaymentController extends Controller
 
             // Create the payment
             $payment = Payment::create([
-                'enrollment_id' => $request->enrollment_id,
+                'enrollment_id' => $enrollmentId,
                 'amount' => $request->amount,
                 'month' => $request->month,
-                'status' => 'pending', // Default status
+                'status' => $request->status ?? 'pending', // Default status
                 'payment_proof' => $request->payment_proof,
                 'payment_date' => $request->payment_date,
                 'admin_notes' => $request->admin_notes
@@ -239,7 +360,7 @@ class PaymentController extends Controller
             }
 
             $payment->confirm(Auth::user());
-            $payment->load(['enrollment.user', 'enrollment.course', 'confirmedBy']);
+            $payment->load(['enrollment.user', 'confirmedBy']);
 
             return response()->json([
                 'success' => true,
@@ -271,7 +392,7 @@ class PaymentController extends Controller
             }
 
             $payment->reject();
-            $payment->load(['enrollment.user', 'enrollment.course']);
+            $payment->load(['enrollment.user']);
 
             return response()->json([
                 'success' => true,
@@ -325,7 +446,7 @@ class PaymentController extends Controller
     public function userPayments($userId): JsonResponse
     {
         try {
-            $payments = Payment::with(['enrollment.user', 'enrollment.course', 'confirmedBy'])
+            $payments = Payment::with(['enrollment.user', 'confirmedBy'])
                 ->whereHas('enrollment', function($q) use ($userId) {
                     $q->where('user_id', $userId);
                 })
@@ -369,7 +490,7 @@ class PaymentController extends Controller
                     'payment_proof' => $path,
                 ]);
 
-                $payment->load(['enrollment.user', 'enrollment.course', 'confirmedBy']);
+                $payment->load(['enrollment.user', 'confirmedBy']);
 
                 return response()->json([
                     'success' => true,

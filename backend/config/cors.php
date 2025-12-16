@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'paths' => [],
+    'paths' => ['api/*', 'sanctum/csrf-cookie', '*'],
 
     'allowed_origins' => ['*'],
 
@@ -25,5 +25,5 @@ return [
 
     'exposed_headers' => [],
 
-    'supports_credentials' => false,
+    'supports_credentials' => true,
 ];

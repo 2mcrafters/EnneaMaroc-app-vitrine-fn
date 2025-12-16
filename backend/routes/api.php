@@ -9,11 +9,19 @@ use App\Http\Controllers\Api\CourseController;
 
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\EnrollmentController;
+use App\Http\Controllers\Api\ConfirmationEmailController;
 use App\Http\Controllers\Api\MeetingLinkController;
 use App\Http\Controllers\Api\ParcoursController;
 use App\Http\Controllers\Api\ParcoursSessionController;
 
 // Routes d'authentification publiques
+// Provide a friendly GET response for /api/login so visiting the route in a browser
+// returns a clear JSON message instead of a MethodNotAllowed exception.
+Route::get('/login', function () {
+    return response()->json([
+        'message' => 'This endpoint accepts POST requests. Send credentials with POST to /api/login.'
+    ], 405);
+});
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 Route::post('/register', [AuthController::class, 'register']);
 
@@ -73,6 +81,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Routes des paiements
     Route::apiResource('payments', PaymentController::class);
+    Route::post('/payments/admin-manual', [PaymentController::class, 'adminManual']);
     Route::post('/payments/{id}/confirm', [PaymentController::class, 'confirm']);
     Route::post('/payments/{id}/reject', [PaymentController::class, 'reject']);
     Route::post('/payments/{id}/upload-proof', [PaymentController::class, 'uploadProof']);
@@ -82,6 +91,12 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Routes des inscriptions
     Route::apiResource('enrollments', EnrollmentController::class);
+    // Confirmation popup form (email)
+    Route::post('/enrollments/confirmation-email', [ConfirmationEmailController::class, 'send']);
+    // Dev-only: quick SMTP test (no personal data)
+    if (config('app.env') === 'local') {
+        Route::post('/enrollments/confirmation-email/test', [ConfirmationEmailController::class, 'test']);
+    }
     Route::post('/enrollments/{id}/activate', [EnrollmentController::class, 'activate']);
     Route::post('/enrollments/{id}/cancel', [EnrollmentController::class, 'cancel']);
     Route::get('/enrollments-stats', [EnrollmentController::class, 'stats']);

@@ -11,15 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Drop foreign key from enrollments if it exists
-        if (Schema::hasColumn('enrollments', 'course_id')) {
-            Schema::table('enrollments', function (Blueprint $table) {
-                // We need to know the foreign key name. Laravel default is table_column_foreign
-                // enrollments_course_id_foreign
-                $table->dropForeign(['course_id']);
-                $table->dropColumn('course_id');
-            });
-        }
+        // IMPORTANT:
+        // Do NOT drop enrollments.course_id.
+        // This application still uses the legacy column name `course_id` but it now references `parcours.id`.
+        // Dropping it breaks enrollment creation and existing data.
 
         Schema::dropIfExists('course_groups');
         Schema::dropIfExists('courses');

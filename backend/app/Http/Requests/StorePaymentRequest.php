@@ -22,9 +22,15 @@ class StorePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'enrollment_id' => 'required|exists:enrollments,id',
+            // For manual admin payments we allow either:
+            // - enrollment_id (existing flow)
+            // - user_id + course_id (new flow: no enrollment select in UI)
+            'enrollment_id' => 'nullable|exists:enrollments,id',
+            'user_id' => 'required_without:enrollment_id|exists:users,id',
+            'course_id' => 'required_without:enrollment_id|exists:courses,id',
             'amount' => 'required|numeric|min:0',
             'month' => 'required|integer|min:1',
+            'status' => 'nullable|in:pending,confirmed,rejected',
             'payment_proof' => 'nullable|string',
             'payment_date' => 'required|date',
             'admin_notes' => 'nullable|string|max:1000'
@@ -39,6 +45,10 @@ class StorePaymentRequest extends FormRequest
         return [
             'enrollment_id.required' => 'Enrollment ID is required',
             'enrollment_id.exists' => 'Selected enrollment does not exist',
+            'user_id.required_without' => 'User ID is required when enrollment is not provided',
+            'user_id.exists' => 'Selected user does not exist',
+            'course_id.required_without' => 'Course/Parcours is required when enrollment is not provided',
+            'course_id.exists' => 'Selected course/parcours does not exist',
             'amount.required' => 'Payment amount is required',
             'amount.numeric' => 'Payment amount must be a number',
             'amount.min' => 'Payment amount must be greater than or equal to 0',

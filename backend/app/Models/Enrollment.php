@@ -5,16 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Parcours;
+use App\Models\ParcoursSession;
 
 class Enrollment extends Model
 {
     protected $fillable = [
         'user_id',
-        'course_id',
         'group_id',
         'status',
         'enrolled_at',
-        'duration_months'
+        'duration_months',
+        'notes'
     ];
 
     protected $casts = [
@@ -35,12 +37,31 @@ class Enrollment extends Model
     }
 
     /**
-     * Get the course associated with the enrollment.
+     * Get the course/parcours for this enrollment.
+     *
+     * IMPORTANT: even if some code paths rely on `group_id`, the database still has
+     * a `course_id` column (see migrations). We keep this relation so API responses
+     * can expose the real chosen course/parcours title.
      */
     public function course(): BelongsTo
     {
-        return $this->belongsTo(Course::class);
+        return $this->belongsTo(Parcours::class, 'course_id');
     }
+
+    /**
+     * Get the group associated with the enrollment.
+     * Note: course_groups table was dropped. This relationship might be invalid if group_id refers to it.
+     * If group_id now refers to ParcoursModule or Agenda, this should be updated.
+     * For now, we disable it to prevent errors.
+     */
+    /*
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(CourseGroup::class, 'group_id');
+    }
+    */
+
+    // NOTE: enrollments may also be tied to a selected session/group via `group_id`.
 
 
 
@@ -93,23 +114,13 @@ class Enrollment extends Model
     }
 
     /**
-     * Get the course group associated with the enrollment if it's a course enrollment.
-     */
-    public function courseGroup(): BelongsTo
-    {
-        return $this->belongsTo(CourseGroup::class, 'group_id');
-    }
-
-    /**
      * Get the group data (CourseGroup) based on enrollment type
      * This replaces the old group_data column with a virtual attribute
      */
     public function getGroupDataAttribute()
     {
-        if ($this->course_id && $this->group_id) {
-            return $this->courseGroup;
-        }
-        
+        // The legacy implementation relied on a `course_groups` table that no longer exists.
+        // We keep the attribute for backward compatibility, but return null.
         return null;
     }
 
@@ -176,5 +187,14 @@ class Enrollment extends Model
     public function scopeForUser($query, $userId)
     {
         return $query->where('user_id', $userId);
+    }
+
+    /**
+     * Get the session/agenda associated with the enrollment.
+     * We map `group_id` to the `agenda` table (ParcoursSession model).
+     */
+    public function session(): BelongsTo
+    {
+        return $this->belongsTo(ParcoursSession::class, 'group_id');
     }
 }

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Enrollment;
-use App\Models\Course;
+use App\Models\Parcours;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +20,8 @@ class EnrollmentController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Enrollment::with(['user', 'course', 'payments', 'courseGroup']);
+            // Eager load relationships including group and its course
+            $query = Enrollment::with(['user', 'payments', 'course', 'session.module.parcours']);
 
             // Filter by status if provided
             if ($request->has('status') && $request->status !== 'all') {
@@ -32,9 +33,9 @@ class EnrollmentController extends Controller
                 $query->where('user_id', $request->user_id);
             }
 
-            // Filter by course ID
-            if ($request->has('course_id')) {
-                $query->where('course_id', $request->course_id);
+            // NOTE: current schema has no `course_id`. Filter by group instead.
+            if ($request->has('group_id')) {
+                $query->where('group_id', $request->group_id);
             }
 
             // Filter by enrollment date range
@@ -83,7 +84,10 @@ class EnrollmentController extends Controller
     {
         $request->validate([
             'user_id' => 'required|exists:users,id',
-            'course_id' => 'required|exists:courses,id', // Only courses now
+            // NOTE: current database schema has no `course_id`. The enrollment is tied to a chosen group/session.
+            // Keep accepting `course_id` in the payload for backward compatibility (frontend still sends it),
+            // but we don't store it.
+            'course_id' => 'sometimes|integer',
             'group_id' => 'required|integer|min:1',
             'duration_months' => 'sometimes|integer|min:1|max:12',
             'notes' => 'nullable|string|max:1000'
@@ -96,28 +100,29 @@ class EnrollmentController extends Controller
 
             // Check if user is already enrolled in this course
             $existingEnrollment = Enrollment::where('user_id', $request->user_id)
-                ->where('course_id', $request->course_id)
+                ->where('group_id', $request->group_id)
                 ->whereIn('status', ['pending_payment', 'pending_confirmation', 'active'])
                 ->first();
 
             if ($existingEnrollment) {
+                $existingEnrollment->load(['user', 'payments']);
+
                 return response()->json([
-                    'success' => false,
-                    'message' => 'User is already enrolled in this course'
-                ], 422);
+                    'success' => true,
+                    'data' => $existingEnrollment,
+                    'message' => 'Enrollment already exists'
+                ], 200);
             }
 
             // Get duration from course if not provided
             $durationMonths = $request->duration_months;
             if (!$durationMonths) {
-                $course = Course::find($request->course_id);
-                $durationMonths = $course->duration_months ?? 1;
+                $durationMonths = 1;
             }
 
             // Create the enrollment
             $enrollment = Enrollment::create([
                 'user_id' => $request->user_id,
-                'course_id' => $request->course_id,
                 'group_id' => $request->group_id,
                 'status' => 'pending_payment',
                 'enrolled_at' => now(),
@@ -126,7 +131,7 @@ class EnrollmentController extends Controller
             ]);
 
             // Load relationships for response
-            $enrollment->load(['user', 'course']);
+            $enrollment->load(['user']);
 
             DB::commit();
 
@@ -151,7 +156,7 @@ class EnrollmentController extends Controller
     public function show(string $id): JsonResponse
     {
         try {
-            $enrollment = Enrollment::with(['user', 'course', 'payments', 'courseGroup'])
+            $enrollment = Enrollment::with(['user', 'payments', 'course'])
                                    ->findOrFail($id);
 
             return response()->json([
@@ -185,7 +190,7 @@ class EnrollmentController extends Controller
 
             $enrollment = Enrollment::findOrFail($id);
             $enrollment->update($request->only(['status', 'group_id', 'duration_months', 'notes']));
-            $enrollment->load(['user', 'course', 'payments', 'courseGroup']);
+            $enrollment->load(['user', 'payments']);
 
             DB::commit();
 
@@ -244,7 +249,8 @@ class EnrollmentController extends Controller
             $enrollment = Enrollment::findOrFail($id);
             
             $enrollment->update(['status' => 'active']);
-            $enrollment->load(['user', 'course', 'payments']);            return response()->json([
+            $enrollment->load(['user', 'payments']);
+            return response()->json([
                 'success' => true,
                 'data' => $enrollment,
                 'message' => 'Enrollment activated successfully'
@@ -267,7 +273,7 @@ class EnrollmentController extends Controller
             $enrollment = Enrollment::findOrFail($id);
             
             $enrollment->update(['status' => 'cancelled']);
-            $enrollment->load(['user', 'course', 'payments']);
+            $enrollment->load(['user', 'payments']);
 
             return response()->json([
                 'success' => true,
@@ -297,7 +303,8 @@ class EnrollmentController extends Controller
                 'cancelled_enrollments' => Enrollment::where('status', 'cancelled')->count(),
                 'completed_enrollments' => Enrollment::where('status', 'completed')->count(),
                 'enrollments_this_month' => Enrollment::where('enrolled_at', '>=', now()->startOfMonth())->count(),
-                'course_enrollments' => Enrollment::whereNotNull('course_id')->count()
+                // Legacy field removed in current schema
+                'course_enrollments' => 0
             ];
 
             return response()->json([
@@ -320,7 +327,7 @@ class EnrollmentController extends Controller
     public function userEnrollments(string $userId): JsonResponse
     {
         try {
-            $enrollments = Enrollment::with(['course', 'payments'])
+            $enrollments = Enrollment::with(['payments'])
                                    ->where('user_id', $userId)
                                    ->orderBy('enrolled_at', 'desc')
                                    ->get();

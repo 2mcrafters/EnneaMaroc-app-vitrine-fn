@@ -62,12 +62,12 @@ class ParcoursController extends Controller
     {
         // Try to find by slug first, then by ID if numeric
         $parcours = Parcours::where('slug', $slug)->with(['modules' => function ($query) {
-            $query->orderBy('order', 'asc');
+            $query->orderBy('order', 'asc')->with('sessions');
         }])->first();
 
         if (!$parcours && is_numeric($slug)) {
             $parcours = Parcours::where('id', $slug)->with(['modules' => function ($query) {
-                $query->orderBy('order', 'asc');
+                $query->orderBy('order', 'asc')->with('sessions');
             }])->firstOrFail();
         } else if (!$parcours) {
             abort(404);
