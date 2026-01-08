@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Parcours;
 use App\Models\ParcoursSession;
+use App\Models\Agenda;
 
 class Enrollment extends Model
 {
@@ -195,6 +196,6 @@ class Enrollment extends Model
      */
     public function session(): BelongsTo
     {
-        return $this->belongsTo(ParcoursSession::class, 'group_id');
+        return $this->belongsTo(Agenda::class, 'parcours_session_id');
     }
 }

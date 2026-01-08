@@ -32,4 +32,12 @@ class Parcours extends Model
             'id'                  // Local key on parcours_modules
         );
     }
+
+    /**
+     * Alias for sessions to match the "Agenda" concept.
+     */
+    public function agenda(): HasManyThrough
+    {
+        return $this->sessions();
+    }
 }
