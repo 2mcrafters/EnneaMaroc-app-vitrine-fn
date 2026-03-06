@@ -208,7 +208,7 @@ const MyCoursesPage: React.FC = () => {
                        )}
                        {enrollment.status === 'Pending Payment' && (
                            <p className="mt-4 text-sm text-yellow-600">Enrollment is pending first month's payment.
-                           {showFeeNotice && <br/><span className="text-xs italic">(Includes 250 DH registration fee)</span>}
+                           {showFeeNotice && <><br/><span className="text-xs italic">(Includes 250 DH registration fee)</span></>}
                            </p>
                        )}
                      </div>

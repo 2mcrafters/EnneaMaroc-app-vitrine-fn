@@ -23,7 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-# Temp fix/scan scripts
-fix_*.cjs
-find_*.cjs
-scan_*.cjs
+# vitrine is a junction/symlink to the enneamaroc repo — do not track here
+vitrine/
+
+# temp build output files
+build_output*.txt
+fix_ecole.cjs
+fix_encoding.cjs

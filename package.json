@@ -1,10 +1,5 @@
 {
-<<<<<<< HEAD
-  "dependencies": {
-    "html-react-parser": "^5.2.10",
-    "react-router-dom": "^7.10.1"
-=======
-  "name": "course-enrollment",
+  "name": "enneamaroc",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,13 +9,34 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.6",
+    "@mui/material": "^7.3.6",
+    "@reduxjs/toolkit": "^2.9.0",
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.11.3",
+    "framer-motion": "^12.23.26",
+    "html-react-parser": "^5.2.10",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-icons": "^5.5.0",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.10.1",
+    "react-slick": "^0.30.3",
+    "slick-carousel": "^1.8.1",
+    "zustand": "^5.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.3",
+    "@tailwindcss/postcss": "^4.1.13",
+    "tailwindcss": "^4.1.13",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
->>>>>>> ffe7481 (feat: Initialize Course Enrollment application with Vite)
+    "vite": "^6.3.6"
   }
 }
