@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Temp fix/scan scripts
+fix_*.cjs
+find_*.cjs
+scan_*.cjs
